@@ -45,7 +45,7 @@ func main() {
 
 type Handler struct {
 	cacheDir string
-	wasmfile string
+	wasmProj *Project
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -56,12 +56,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//w.Write([]byte(r.URL.Path))
 	upath := r.URL.Path[1:]
 	if strings.HasPrefix(upath, "github.com") {
-		file, err := h.Build(upath)
-		h.wasmfile = file
+		proj, err := h.Build(upath)
 		if err != nil {
 			fmt.Fprintf(w, "build error: %v", err)
+			return
 		}
-		log.Println("build", file, err)
+		h.wasmProj = proj
+		log.Println("build", proj, err)
 	}
 }
 
@@ -76,15 +77,21 @@ func cleanPkg(pkgpath string) string {
 	return pkgpath
 }
 
-func (h *Handler) Build(pkgpath string) (string, error) {
+type Project struct {
+	PkgPath string
+	Wasm    string
+	Dir     string
+}
+
+func (h *Handler) Build(pkgpath string) (*Project, error) {
 	proj, args, err := gopprojs.ParseOne(pkgpath)
 	if err != nil {
-		return "", fmt.Errorf("parser pkg failed: %v", err)
+		return nil, fmt.Errorf("parser pkg failed: %v", err)
 	}
 	flags := 0
 	ctx, goProj, err := gopproj.OpenProject(flags, proj)
 	if err != nil {
-		return "", fmt.Errorf("open project failed: %v", err)
+		return nil, fmt.Errorf("open project failed: %v", err)
 	}
 	goProj.ExecArgs = args
 	if goProj.FlagRTOE {
@@ -92,13 +99,14 @@ func (h *Handler) Build(pkgpath string) (string, error) {
 	}
 	fp, err := goProj.Fingerp()
 	if err != nil {
-		return "", err
-	}
-	fileName := filepath.Join(h.cacheDir, pkgpath, fingToName(fp)+".wasm")
-	if _, err := os.Stat(fileName); err == nil {
-		return fileName, nil
+		return nil, err
 	}
 	cmd := ctx.GoCommand("run", goProj)
+	fileName := filepath.Join(h.cacheDir, pkgpath, fingToName(fp)+".wasm")
+	wasmProj := &Project{PkgPath: pkgpath, Wasm: fileName, Dir: cmd.Dir}
+	if _, err := os.Stat(fileName); err == nil {
+		return wasmProj, nil
+	}
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -107,5 +115,5 @@ func (h *Handler) Build(pkgpath string) (string, error) {
 	buildArgs := []string{"go", "build", "-o", fileName}
 	cmd.Args = append(buildArgs, cmd.Args[2:]...)
 	err = cmd.Run()
-	return fileName, err
+	return wasmProj, err
 }
