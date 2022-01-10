@@ -58,6 +58,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(upath, "github.com") {
 		file, err := h.Build(upath)
 		h.wasmfile = file
+		if err != nil {
+			fmt.Fprintf(w, "build error: %v", err)
+		}
 		log.Println("build", file, err)
 	}
 }
@@ -91,7 +94,7 @@ func (h *Handler) Build(pkgpath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	fileName := filepath.Join(h.cacheDir, cleanPkg(pkgpath), fingToName(fp)+".wasm")
+	fileName := filepath.Join(h.cacheDir, pkgpath, fingToName(fp)+".wasm")
 	if _, err := os.Stat(fileName); err == nil {
 		return fileName, nil
 	}
