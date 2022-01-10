@@ -66,8 +66,15 @@ func fingToName(fing *gopproj.Fingerp) string {
 	return fmt.Sprintf("%x-%v", fing.Hash, fing.ModTime.Unix())
 }
 
-func (h *Handler) Build(pkg string) (string, error) {
-	proj, args, err := gopprojs.ParseOne(pkg)
+func cleanPkg(pkgpath string) string {
+	if pos := strings.Index(pkgpath, "@"); pos != -1 {
+		return pkgpath[:pos]
+	}
+	return pkgpath
+}
+
+func (h *Handler) Build(pkgpath string) (string, error) {
+	proj, args, err := gopprojs.ParseOne(pkgpath)
 	if err != nil {
 		return "", fmt.Errorf("parser pkg failed: %v", err)
 	}
@@ -84,7 +91,7 @@ func (h *Handler) Build(pkg string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	fileName := filepath.Join(h.cacheDir, pkg, fingToName(fp)+".wasm")
+	fileName := filepath.Join(h.cacheDir, cleanPkg(pkgpath), fingToName(fp)+".wasm")
 	if _, err := os.Stat(fileName); err == nil {
 		return fileName, nil
 	}
