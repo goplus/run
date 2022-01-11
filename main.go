@@ -95,17 +95,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.ServeContent(w, r, "run.html", time.Now(), bytes.NewReader([]byte(data)))
 	case "wasm_exec.js":
 		f := filepath.Join(runtime.GOROOT(), "misc", "wasm", "wasm_exec.js")
-		http.ServeFile(w, r, f)
+		serveFile(w, r, upath, f)
 		return
 	case "main.wasm":
-		http.ServeFile(w, r, h.wasmProj.Wasm)
-		// f, err := os.Open(h.wasmProj.Wasm)
-		// if err != nil {
-		// 	http.Error(w, fmt.Sprintf("load %v error", h.wasmProj.PkgPath), http.StatusInternalServerError)
-		// 	return
-		// }
-		// defer f.Close()
-		// http.ServeContent(w, r, "main.wasm", time.Now(), f)
+		serveFile(w, r, upath, h.wasmProj.Wasm)
 		return
 	case "_wait":
 		waitForUpdate(w, r)
@@ -120,17 +113,23 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("load %v error", upath), http.StatusInternalServerError)
 			return
 		}
-		http.ServeFile(w, r, fileName)
+		serveFile(w, r, upath, fileName)
 		return
-		// f, err := os.Open(fileName)
-		// if err != nil {
-		// 	http.Error(w, fmt.Sprintf("load %v error", upath), http.StatusInternalServerError)
-		// 	return
-		// }
-		// defer f.Close()
-		// http.ServeContent(w, r, upath, time.Now(), f)
-		// return
 	}
+}
+
+func serveFile(w http.ResponseWriter, r *http.Request, upath string, fileName string) {
+	f, err := os.Open(fileName)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("load %v error", upath), http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
+	d, err := f.Stat()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("load %v error", upath), http.StatusInternalServerError)
+	}
+	http.ServeContent(w, r, upath, d.ModTime(), f)
 }
 
 var (
