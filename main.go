@@ -98,13 +98,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, f)
 		return
 	case "main.wasm":
-		f, err := os.Open(h.wasmProj.Wasm)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("load %v error", h.wasmProj.PkgPath), http.StatusInternalServerError)
-			return
-		}
-		defer f.Close()
-		http.ServeContent(w, r, "main.wasm", time.Now(), f)
+		http.ServeFile(w, r, h.wasmProj.Wasm)
+		// f, err := os.Open(h.wasmProj.Wasm)
+		// if err != nil {
+		// 	http.Error(w, fmt.Sprintf("load %v error", h.wasmProj.PkgPath), http.StatusInternalServerError)
+		// 	return
+		// }
+		// defer f.Close()
+		// http.ServeContent(w, r, "main.wasm", time.Now(), f)
 		return
 	case "_wait":
 		waitForUpdate(w, r)
@@ -119,14 +120,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("load %v error", upath), http.StatusInternalServerError)
 			return
 		}
-		f, err := os.Open(fileName)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("load %v error", upath), http.StatusInternalServerError)
-			return
-		}
-		defer f.Close()
-		http.ServeContent(w, r, upath, time.Now(), f)
+		http.ServeFile(w, r, fileName)
 		return
+		// f, err := os.Open(fileName)
+		// if err != nil {
+		// 	http.Error(w, fmt.Sprintf("load %v error", upath), http.StatusInternalServerError)
+		// 	return
+		// }
+		// defer f.Close()
+		// http.ServeContent(w, r, upath, time.Now(), f)
+		// return
 	}
 }
 
