@@ -2,7 +2,7 @@
 run.goplus.org
 
 
-### run demo
+### run http server
 ```
 $ go run main.go
 ```
@@ -10,7 +10,7 @@ $ go run main.go
 
 <http://127.0.0.1:8080/github.com/goplus/FlappyCalf@v0.7.1>
 
-### Usage
+### usage
 ```
 Usage of run:
   -allow-origin string
