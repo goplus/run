@@ -24,6 +24,10 @@ var (
 	flagVerbose     bool
 )
 
+var (
+	spx_demo = "github.com/goplus/FlappyCalf"
+)
+
 func init() {
 	flag.BoolVar(&flagVerbose, "v", false, "print verbose information")
 	flag.StringVar(&flagAddr, "http", ":8080", "HTTP bind address to serve")
@@ -67,7 +71,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if h.wasmProj != nil {
 			data = strings.ReplaceAll(indexHTML, "{{pkg}}", h.wasmProj.PkgPath)
 		} else {
-			data = strings.ReplaceAll(indexHTML, "{{pkg}}", "github.com/goplus/FlappyCalf")
+			data = strings.ReplaceAll(indexHTML, "{{pkg}}", spx_demo)
 		}
 		http.ServeContent(w, r, "", time.Now(), bytes.NewReader([]byte(data)))
 		return
