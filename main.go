@@ -52,7 +52,6 @@ func main() {
 type Handler struct {
 	cacheDir string
 	wasmProj *Project
-	homepkg  string
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -151,7 +150,7 @@ func notifyWaiters(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func fingToName(fing *gopproj.Fingerp) string {
+func fingerpToName(fing *gopproj.Fingerp) string {
 	return fmt.Sprintf("%x-%v", fing.Hash, fing.ModTime.Unix())
 }
 
@@ -187,7 +186,7 @@ func (h *Handler) Build(pkgpath string) (*Project, error) {
 		return nil, err
 	}
 	cmd := ctx.GoCommand("run", goProj)
-	fileName := filepath.Join(h.cacheDir, pkgpath, fingToName(fp)+".wasm")
+	fileName := filepath.Join(h.cacheDir, pkgpath, fingerpToName(fp)+".wasm")
 	wasmProj := &Project{PkgPath: pkgpath, Wasm: fileName, Dir: cmd.Dir}
 	if _, err := os.Stat(fileName); err == nil {
 		return wasmProj, nil
@@ -209,7 +208,6 @@ const indexHTML = `
 <head>
 <meta charset="utf-8">
 </head>
-
 <body>
 run spx game:
 <input style="width:50%" id="spxurl" name="spxurl" type="text" value="{{pkg}}"/>
@@ -220,7 +218,6 @@ function run(){
     location.href = "/"+val;
 }
 </script>
-
 </body>
 </html>
 `
