@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -55,7 +56,7 @@ func main() {
 
 type Handler struct {
 	cacheDir string
-	wasmProj *Project
+	projects sync.Map
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -67,12 +68,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	upath := r.URL.Path[1:]
 	if upath == "" || upath == "index.html" {
-		var data string
-		if h.wasmProj != nil {
-			data = strings.ReplaceAll(indexHTML, "{{pkg}}", h.wasmProj.PkgPath)
-		} else {
-			data = strings.ReplaceAll(indexHTML, "{{pkg}}", spx_demo)
-		}
+		data := strings.ReplaceAll(indexHTML, "{{pkg}}", spx_demo)
 		http.ServeContent(w, r, "", time.Now(), bytes.NewReader([]byte(data)))
 		return
 	}
@@ -80,46 +76,72 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		proj, err := h.Build(upath)
 		log.Println("load pkg", upath, err)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("load remote pkg %v error", upath), http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("load pkg %v error", upath), http.StatusInternalServerError)
 			return
 		}
-		h.wasmProj = proj
-		http.Redirect(w, r, "/run.html", http.StatusSeeOther)
+		// create spx symlink
+		fileName := filepath.Join(h.cacheDir, "spx", proj.PkgPath)
+		dir, _ := filepath.Split(fileName)
+		os.MkdirAll(dir, 0755)
+		os.Remove(fileName)
+		err = os.Symlink(proj.Dir, fileName)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("link pkg %v error", upath), http.StatusInternalServerError)
+		}
+		h.projects.Store(upath, proj)
+		http.Redirect(w, r, "/spx/"+upath+"/index.html", http.StatusSeeOther)
 		return
-	}
-	if h.wasmProj == nil {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
-	}
-	switch upath {
-	case "run.html":
-		var argv []string
-		argv = append(argv, `"`+template.JSEscapeString(h.wasmProj.PkgPath)+`"`)
-		data := strings.ReplaceAll(runHTML, "{{.Argv}}", "["+strings.Join(argv, ", ")+"]")
-		http.ServeContent(w, r, "run.html", time.Now(), bytes.NewReader([]byte(data)))
-	case "wasm_exec.js":
-		f := filepath.Join(runtime.GOROOT(), "misc", "wasm", "wasm_exec.js")
-		serveFile(w, r, upath, f)
-		return
-	case "main.wasm":
-		serveFile(w, r, upath, h.wasmProj.Wasm)
-		return
-	case "_wait":
-		waitForUpdate(w, r)
-		return
-	case "_notify":
-		notifyWaiters(w, r)
-		return
-	default:
-		//assets/sprites/Logo/index.json
-		fileName := filepath.Clean(filepath.Join(h.wasmProj.Dir, upath))
-		if !strings.HasPrefix(fileName, h.wasmProj.Dir) {
+	} else if strings.HasPrefix(upath, "spx/") {
+		rpath := upath[4:]
+		pos := strings.LastIndex(rpath, "/")
+		pkg, file := rpath[:pos], rpath[pos+1:]
+		switch file {
+		case "index.html":
+			value, ok := h.projects.Load(pkg)
+			if ok {
+				proj := value.(*Project)
+				var argv []string
+				argv = append(argv, `"`+template.JSEscapeString(proj.PkgPath)+`"`)
+				data := strings.ReplaceAll(runHTML, "{{.Argv}}", "["+strings.Join(argv, ", ")+"]")
+				data = strings.ReplaceAll(data, "{{main.wasm}}", "/wasm/"+proj.PkgPath+"/"+filepath.Base(proj.Wasm))
+				http.ServeContent(w, r, "index.html", time.Now(), bytes.NewReader([]byte(data)))
+				return
+			}
+		case "wasm_exec.js":
+			_, ok := h.projects.Load(pkg)
+			if ok {
+				f := filepath.Join(runtime.GOROOT(), "misc", "wasm", "wasm_exec.js")
+				serveFile(w, r, upath, f)
+				return
+			}
+		case "_wait":
+			waitForUpdate(w, r)
+			return
+		case "_notify":
+			notifyWaiters(w, r)
+			return
+		}
+		fileName := filepath.Clean(filepath.Join(h.cacheDir, upath))
+		if !strings.HasPrefix(fileName, filepath.Join(h.cacheDir, "spx")) {
 			http.Error(w, fmt.Sprintf("load %v error", upath), http.StatusInternalServerError)
 			return
 		}
 		serveFile(w, r, upath, fileName)
 		return
+	} else if strings.HasPrefix(upath, "wasm/") {
+		rpath := upath[5:]
+		pos := strings.LastIndex(rpath, "/")
+		pkg, _ := rpath[:pos], rpath[pos+1:]
+		value, ok := h.projects.Load(pkg)
+		if !ok {
+			http.Error(w, fmt.Sprintf("run pkg %v error", pkg), http.StatusInternalServerError)
+			return
+		}
+		proj := value.(*Project)
+		serveFile(w, r, "main.wasm", proj.Wasm)
+		return
 	}
+	http.Error(w, upath, http.StatusInternalServerError)
 }
 
 func serveFile(w http.ResponseWriter, r *http.Request, upath string, fileName string) {
@@ -192,7 +214,7 @@ func (h *Handler) Build(pkgpath string) (*Project, error) {
 		return nil, err
 	}
 	cmd := ctx.GoCommand("run", goProj)
-	fileName := filepath.Join(h.cacheDir, pkgpath, fingerpToName(fp)+".wasm")
+	fileName := filepath.Join(h.cacheDir, "wasm", pkgpath, fingerpToName(fp)+".wasm")
 	wasmProj := &Project{PkgPath: pkgpath, Wasm: fileName, Dir: cmd.Dir}
 	if _, err := os.Stat(fileName); err == nil {
 		return wasmProj, nil
@@ -234,7 +256,7 @@ const runHTML = `<!DOCTYPE html>
 <script src="wasm_exec.js"></script>
 <script>
 (async () => {
-  const resp = await fetch('main.wasm');
+  const resp = await fetch('{{main.wasm}}');
   if (!resp.ok) {
     const pre = document.createElement('pre');
     pre.innerText = await resp.text();
