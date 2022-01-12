@@ -47,8 +47,6 @@ func main() {
 		dir = filepath.Join(wd, dir)
 	}
 	log.Println("start server", flagAddr)
-	//http.Handle("/spx", http.FileServer(http.Dir(filepath.Join(dir, "spx"))))
-	//http.Handle("/wasm", http.FileServer(http.Dir(filepath.Join(dir, "wasm"))))
 	http.Handle("/", &Handler{cacheDir: dir})
 	err := http.ListenAndServe(flagAddr, nil)
 	if err != nil {
